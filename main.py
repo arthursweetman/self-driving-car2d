@@ -26,8 +26,10 @@ class Car():
         self.shape.mass = 10
         space.add(self.body, self.shape)
 
-    def update_velo(self, x, y):
-        self.body.velocity += x, y
+    def reset(self):
+        self.body.position = 100, 100
+        self.body.velocity = 0, 0
+        self.body.angle = 0
 
     def accelerate(self, accel_const):
         # Accelerate in the direction the car is facing
@@ -52,12 +54,14 @@ class Car():
         self.body._set_angular_velocity(0)
         self.body.angle = (self.body.angle + turn_speed*direction)
 
+
 class Wall():
     def __init__(self):
         self.body = pm.Body(body_type = pm.Body.STATIC)
 
         self.shape = pm.Segment(self.body, (50,50), (50,200),5)
         space.add(self.body, self.shape)
+
 
 def main():
 
@@ -69,7 +73,7 @@ def main():
     wall = Wall()
 
     acceleration = 15
-    friction = 5
+    friction = 10
     max_speed = 60
 
     running = True
@@ -82,8 +86,11 @@ def main():
                 and (event.key in [pg.K_ESCAPE, pg.K_q])
             ):
                 running = False
-        
+
         keys = pg.key.get_pressed()
+        if keys[pg.K_r]:
+            car.reset()
+
         velo = car.get_velo()
         if keys[pg.K_UP]:
             car.accelerate(acceleration)
