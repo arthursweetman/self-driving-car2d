@@ -24,9 +24,18 @@ class Car():
         self.shape.mass = 10
         space.add(self.body, self.shape)
 
-    def update_pos(self, x, y):
-        self.body.position += x,y
+    def update_velo(self, x, y):
+        self.body.velocity += x, y
 
+    def get_velo(self):
+        return self.body.velocity
+
+class Wall():
+    def __init__(self):
+        self.body = pm.Body(body_type = pm.Body.STATIC)
+
+        self.shape = pm.Segment(self.body, (50,50), (50,200),5)
+        space.add(self.body, self.shape)
 
 def main():
 
@@ -35,6 +44,11 @@ def main():
     draw_options = util.DrawOptions(screen)
 
     car = Car()
+    wall = Wall()
+
+    acceleration = 15
+    friction = 5
+    max_speed = 60
 
     running = True
     # Run the game
@@ -49,13 +63,27 @@ def main():
         
         keys = pg.key.get_pressed()
         if keys[pg.K_UP]:
-            car.update_pos(0,-5)
-        if keys[pg.K_DOWN]:
-            car.update_pos(0,5)
+            car.update_velo(0, -acceleration)
+        elif keys[pg.K_DOWN]:
+            car.update_velo(0, acceleration)
+        else:
+            velo_x = car.get_velo()[1]
+            if velo_x > 0:
+                car.update_velo(0, -friction)
+            elif velo_x < 0:
+                car.update_velo(0, friction)
+
         if keys[pg.K_LEFT]:
-            car.update_pos(-5,0)
-        if keys[pg.K_RIGHT]:
-            car.update_pos(5,0)
+            car.update_velo(-acceleration, 0)
+        elif keys[pg.K_RIGHT]:
+            car.update_velo(acceleration, 0)
+        else:
+            velo_y = car.get_velo()[0]
+            if velo_y > 0:
+                car.update_velo(-friction, 0)
+            elif velo_y < 0:
+                car.update_velo(friction, 0)
+
         
         screen.fill(pg.Color("white"))
         space.debug_draw(draw_options)
