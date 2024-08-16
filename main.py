@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import pymunk as pm
 import pygame as pg
+import math
 
 import pymunk.pygame_util as util
 
@@ -18,8 +19,9 @@ class Car():
         self.body = pm.Body()
         self.body.position = 100,100
         self.body.velocity = 0,0
+        self.body.angle = 0
 
-        w, h = 20, 30
+        w, h = 30, 20
         self.shape = pm.Poly.create_box(self.body, (w, h))
         self.shape.mass = 10
         space.add(self.body, self.shape)
@@ -27,8 +29,28 @@ class Car():
     def update_velo(self, x, y):
         self.body.velocity += x, y
 
+    def accelerate(self, accel_const):
+        # Accelerate in the direction the car is facing
+        angle = self.body.angle
+        self.body.velocity += accel_const*math.cos(angle), accel_const*math.sin(angle)
+
+    def decelerate(self, accel_const):
+        # Decelerate in the direction of the velocity vector
+        x = self.body.velocity[0]
+        y = self.body.velocity[1]
+        angle = math.atan2(y, x)  # angle of the direction of velocity
+        self.body.velocity += accel_const*math.cos(angle), accel_const*math.sin(angle)
+
     def get_velo(self):
-        return self.body.velocity
+        x=self.body.velocity[0]
+        y=self.body.velocity[1]
+        magnitude = math.sqrt(x**2 + y**2)
+
+        return magnitude
+
+    def turn(self, direction, turn_speed=math.pi/36):
+        self.body._set_angular_velocity(0)
+        self.body.angle = (self.body.angle + turn_speed*direction)
 
 class Wall():
     def __init__(self):
@@ -62,28 +84,19 @@ def main():
                 running = False
         
         keys = pg.key.get_pressed()
+        velo = car.get_velo()
         if keys[pg.K_UP]:
-            car.update_velo(0, -acceleration)
+            car.accelerate(acceleration)
         elif keys[pg.K_DOWN]:
-            car.update_velo(0, acceleration)
+            car.accelerate(-acceleration)
         else:
-            velo_x = car.get_velo()[1]
-            if velo_x > 0:
-                car.update_velo(0, -friction)
-            elif velo_x < 0:
-                car.update_velo(0, friction)
+            if velo > 0:
+                car.decelerate(-friction)
 
         if keys[pg.K_LEFT]:
-            car.update_velo(-acceleration, 0)
+            car.turn(-1)
         elif keys[pg.K_RIGHT]:
-            car.update_velo(acceleration, 0)
-        else:
-            velo_y = car.get_velo()[0]
-            if velo_y > 0:
-                car.update_velo(-friction, 0)
-            elif velo_y < 0:
-                car.update_velo(friction, 0)
-
+            car.turn(1)
         
         screen.fill(pg.Color("white"))
         space.debug_draw(draw_options)
