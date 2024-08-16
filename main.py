@@ -24,12 +24,14 @@ class Car():
         w, h = 30, 20
         self.shape = pm.Poly.create_box(self.body, (w, h))
         self.shape.mass = 10
+        self.shape.collision_type = 1
         space.add(self.body, self.shape)
 
     def reset(self):
         self.body.position = 100, 100
         self.body.velocity = 0, 0
         self.body.angle = 0
+        self.body._set_angular_velocity(0)
 
     def accelerate(self, accel_const):
         # Accelerate in the direction the car is facing
@@ -60,8 +62,13 @@ class Wall():
         self.body = pm.Body(body_type = pm.Body.STATIC)
 
         self.shape = pm.Segment(self.body, (50,50), (50,200),5)
+        self.shape.collision_type = 2
         space.add(self.body, self.shape)
 
+
+def collide(arbiter, space, data):
+    print("Collision!")
+    return True
 
 def main():
 
@@ -75,6 +82,9 @@ def main():
     acceleration = 15
     friction = 10
     max_speed = 60
+
+    handler = space.add_collision_handler(1, 2)
+    handler.begin = collide
 
     running = True
     # Run the game
