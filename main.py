@@ -7,28 +7,36 @@ import pymunk.pygame_util as util
 
 
 width, height = 690, 600
+screen = pg.display.set_mode((width, height))
+
+# Declare Pymunk Space
+space = pm.Space()
+space.gravity = 0, 0
+
+class Car():
+    def __init__(self):
+        self.body = pm.Body()
+        self.body.position = 100,100
+        self.body.velocity = 0,0
+
+        w, h = 20, 30
+        self.shape = pm.Poly.create_box(self.body, (w, h))
+        self.shape.mass = 10
+        space.add(self.body, self.shape)
+
+    def update_pos(self, x, y):
+        self.body.position += x,y
+
 
 def main():
+
     pg.init()
-    screen = pg.display.set_mode((width, height))
     clock = pg.time.Clock()
-    running = True
-    # font = pg.font.SysFont("Arial", 16)
-
-    # Physics
-    space = pm.Space()
-    space.gravity = 0,0
     draw_options = util.DrawOptions(screen)
-    
-    body = pm.Body()
-    body.position = 100,100
-    body.velocity = 0,0
 
-    w, h = 20, 30
-    poly = pm.Poly.create_box(body, (w, h))
-    poly.mass = 10
-    space.add(body, poly)
+    car = Car()
 
+    running = True
     # Run the game
     while running:
         for event in pg.event.get():
@@ -41,17 +49,16 @@ def main():
         
         keys = pg.key.get_pressed()
         if keys[pg.K_UP]:
-            body.position += 0,-5
+            car.update_pos(0,-5)
         if keys[pg.K_DOWN]:
-            body.position += 0,5
+            car.update_pos(0,5)
         if keys[pg.K_LEFT]:
-            body.position += -5,0
+            car.update_pos(-5,0)
         if keys[pg.K_RIGHT]:
-            body.position += 5,0
+            car.update_pos(5,0)
         
-        screen.fill(pg.Color("black"))
+        screen.fill(pg.Color("white"))
         space.debug_draw(draw_options)
-
         pg.display.flip()
         
         fps = 60
