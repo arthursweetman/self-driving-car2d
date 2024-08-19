@@ -1,3 +1,5 @@
+import time
+
 import pandas as pd
 import numpy as np
 import pymunk as pm
@@ -20,9 +22,9 @@ SIGHT_LENGTH = 1000
 class Car():
     def __init__(self):
         self.body = pm.Body()
-        self.body.position = 100,100
+        self.body.position = 300,500
         self.body.velocity = 0,0
-        self.body.angle = 0
+        self.body.angle = 3*math.pi/2
         self.sights = {}
 
         w, h = 30, 20
@@ -32,11 +34,19 @@ class Car():
         self.shape.filter = pm.ShapeFilter(group = 1)
         space.add(self.body, self.shape)
 
+        self.start_time = time.time()
+        self.end_time = None
+        self.finish_time = None
+
     def reset(self):
-        self.body.position = 100, 100
+        self.body.position = 300, 500
         self.body.velocity = 0, 0
-        self.body.angle = 0
+        self.body.angle = 3 * math.pi / 2
         self.body._set_angular_velocity(0)
+
+        self.start_time = time.time()
+        self.end_time = None
+        self.finish_time = None
 
     def accelerate(self, accel_const):
         # Accelerate in the direction the car is facing
@@ -84,14 +94,21 @@ class Car():
 
         return self.sights
 
+    def finish(self, arbiter, space, data):
+        self.end_time = time.time()
+        self.finish_time = self.end_time - self.start_time
+        print(f"Completed course in {self.finish_time} seconds.")
+        self.reset()
+        return True
+
 
 class Wall():
-    def __init__(self, a, b, radius=5):
+    def __init__(self, a, b, radius=5, collision_type=2, group = 2):
         self.body = pm.Body(body_type = pm.Body.STATIC)
 
         self.shape = pm.Segment(self.body, a, b,radius)
-        self.shape.collision_type = 2
-        self.shape.filter = pm.ShapeFilter(group = 2)
+        self.shape.collision_type = collision_type
+        self.shape.filter = pm.ShapeFilter(group = group)
         space.add(self.body, self.shape)
 
 
@@ -111,6 +128,8 @@ def main():
     wall1 = Wall(*segments1)
     segments2 = [(350, 500),(350, 100)]
     wall2 = Wall(*segments2)
+    finishLine = [(250, 100),(350,100)]
+    finish = Wall(*finishLine, radius=10, collision_type=3, group=3)
 
     acceleration = 15
     friction = 10
@@ -119,6 +138,10 @@ def main():
     handler = space.add_collision_handler(1, 2)
     handler.begin = collide
 
+    cross_finish = space.add_collision_handler(1, 3)
+    cross_finish.begin = car.finish
+
+    start_time = time.time()
     running = True
     # Run the game
     while running:
