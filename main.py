@@ -5,6 +5,7 @@ import pygame as pg
 import math
 
 import pymunk.pygame_util as util
+from pymunk.vec2d import Vec2d
 
 
 width, height = 690, 600
@@ -28,6 +29,7 @@ class Car():
         self.shape = pm.Poly.create_box(self.body, (w, h))
         self.shape.mass = 10
         self.shape.collision_type = 1
+        self.shape.filter = pm.ShapeFilter(group = 1)
         space.add(self.body, self.shape)
 
     def reset(self):
@@ -62,33 +64,34 @@ class Car():
         self.body._set_angular_velocity(0)
         self.body.angle = (self.body.angle + turn_speed*direction)
 
-    def update_sight(self, wall):
+    def update_sight(self, surface):
 
-        pi = math.pi
-
-        directions = [0, pi/4, 2*pi/4, 3*pi/4, pi, 5*pi/4, 6*pi/4, 7*pi/4]
+        directions = np.linspace(0, 2*math.pi, 32)  # Generate 32 diffrent angles of sight evenly distributed around the car
 
         for d in directions:
 
-            angle = self.body.angle + d  # direction relative to directly in fron tof the car
+            angle = self.body.angle + d  # direction relative to directly in front of the car
 
-            segment_start = self.body.position
-            segment_end = tuple(map(sum, zip(self.body.position, SIGHT_LENGTH*np.array([math.cos(angle), math.sin(angle)]))))
+            segment_start = (self.body.position[0], self.body.position[1])
+            segment_end = self.body.position + (SIGHT_LENGTH*math.cos(angle), SIGHT_LENGTH*math.sin(angle))
+            segment_end = (segment_end[0], segment_end[1])
 
-            info = wall.shape.segment_query(segment_start, segment_end)
-            self.sights['{0:.2f}'.format(d)] = (info.point if info.shape is not None else None)
+            filter = pm.ShapeFilter(group=1)
+            info = space.segment_query_first(segment_start, segment_end, radius=1, shape_filter=filter)
+            self.sights['{0:.2f}'.format(d)] = (info.point if info is not None else None)
 
-            print(self.sights)
+            pg.draw.line(surface, (255,0,0,75), segment_start, segment_end if info is None else info.point)
 
         return self.sights
 
 
 class Wall():
-    def __init__(self):
+    def __init__(self, a, b, radius=5):
         self.body = pm.Body(body_type = pm.Body.STATIC)
 
-        self.shape = pm.Segment(self.body, (50,50), (50,200),5)
+        self.shape = pm.Segment(self.body, a, b,radius)
         self.shape.collision_type = 2
+        self.shape.filter = pm.ShapeFilter(group = 2)
         space.add(self.body, self.shape)
 
 
@@ -103,7 +106,11 @@ def main():
     draw_options = util.DrawOptions(screen)
 
     car = Car()
-    wall = Wall()
+
+    segments1 = [(250, 500),(250, 100)]
+    wall1 = Wall(*segments1)
+    segments2 = [(350, 500),(350, 100)]
+    wall2 = Wall(*segments2)
 
     acceleration = 15
     friction = 10
@@ -115,6 +122,7 @@ def main():
     running = True
     # Run the game
     while running:
+        screen.fill(pg.Color("white"))
         for event in pg.event.get():
             if(
                 event.type == pg.QUIT
@@ -143,9 +151,8 @@ def main():
         elif keys[pg.K_RIGHT]:
             car.turn(1)
 
-        car.update_sight(wall)
-        
-        screen.fill(pg.Color("white"))
+        car.update_sight(screen)
+
         space.debug_draw(draw_options)
         pg.display.flip()
         
