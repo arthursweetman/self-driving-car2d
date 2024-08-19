@@ -38,15 +38,16 @@ class Car():
         self.end_time = None
         self.finish_time = None
 
-    def reset(self):
+    def reset(self, hard: bool):
         self.body.position = 300, 500
         self.body.velocity = 0, 0
         self.body.angle = 3 * math.pi / 2
         self.body._set_angular_velocity(0)
 
-        self.start_time = time.time()
-        self.end_time = None
-        self.finish_time = None
+        if hard:
+            self.start_time = time.time()
+            self.end_time = None
+            self.finish_time = None
 
     def accelerate(self, accel_const):
         # Accelerate in the direction the car is facing
@@ -98,7 +99,11 @@ class Car():
         self.end_time = time.time()
         self.finish_time = self.end_time - self.start_time
         print(f"Completed course in {self.finish_time} seconds.")
-        self.reset()
+        self.reset(hard=True)
+        return True
+
+    def wall_collision(self, arbiter, space, data):
+        self.reset(hard=False)
         return True
 
 
@@ -111,10 +116,6 @@ class Wall():
         self.shape.filter = pm.ShapeFilter(group = group)
         space.add(self.body, self.shape)
 
-
-def collide(arbiter, space, data):
-    print("Collision!")
-    return True
 
 def main():
 
@@ -135,8 +136,8 @@ def main():
     friction = 10
     max_speed = 60
 
-    handler = space.add_collision_handler(1, 2)
-    handler.begin = collide
+    hit_wall = space.add_collision_handler(1, 2)
+    hit_wall.begin = car.wall_collision
 
     cross_finish = space.add_collision_handler(1, 3)
     cross_finish.begin = car.finish
