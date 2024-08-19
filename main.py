@@ -14,12 +14,19 @@ screen = pg.display.set_mode((width, height))
 space = pm.Space()
 space.gravity = 0, 0
 
+SIGHT_LENGTH = 1000
+
 class Car():
     def __init__(self):
         self.body = pm.Body()
         self.body.position = 100,100
         self.body.velocity = 0,0
         self.body.angle = 0
+        self.sight_front = None
+        self.sight_rear = None
+        self.sight_left = None
+        self.sight_right = None
+        self.sights = np.array()
 
         w, h = 30, 20
         self.shape = pm.Poly.create_box(self.body, (w, h))
@@ -52,9 +59,38 @@ class Car():
 
         return magnitude
 
+    def set_velocity(self, x, y):
+        self.body.velocity = x, y
+
     def turn(self, direction, turn_speed=math.pi/36):
         self.body._set_angular_velocity(0)
         self.body.angle = (self.body.angle + turn_speed*direction)
+
+    def update_sight(self, wall):
+
+        directions = [0, math.pi/2, math.pi, 3*math.pi/2]
+
+        for d in directions:
+            pass
+
+        angle = self.body.angle  # directly ahead of the car
+        angle_rear = self.body.angle + math.pi  # directly behind the car
+
+        segment_start = self.body.position
+        segment_end_front = tuple(map(sum, zip(self.body.position, SIGHT_LENGTH*np.array([math.cos(angle), math.sin(angle)]))))
+        segment_end_rear = tuple(map(sum, zip(self.body.position, SIGHT_LENGTH*np.array([math.cos(angle_rear), math.sin(angle_rear)]))))
+
+
+        info_front = wall.shape.segment_query(segment_start, segment_end_front)
+        info_rear = wall.shape.segment_query(segment_start, segment_end_rear)
+        self.sight_front = info_front.point if info_front.shape is not None else None
+        self.sight_rear = info_rear.point if info_rear.shape is not None else None
+
+
+        print("FRONT: ", self.sight_front)
+        print("REAR: ", self.sight_rear)
+
+        return self.sight_front
 
 
 class Wall():
@@ -109,11 +145,15 @@ def main():
         else:
             if velo > 0:
                 car.decelerate(-friction)
+            if (velo > 0) & (velo < 10):  # Prevent persistent "drifting" of the car
+                car.set_velocity(0, 0)
 
         if keys[pg.K_LEFT]:
             car.turn(-1)
         elif keys[pg.K_RIGHT]:
             car.turn(1)
+
+        car.update_sight(wall)
         
         screen.fill(pg.Color("white"))
         space.debug_draw(draw_options)
