@@ -9,6 +9,8 @@ import math
 import pymunk.pygame_util as util
 from pymunk.vec2d import Vec2d
 
+import model
+
 
 width, height = 690, 600
 screen = pg.display.set_mode((width, height))
@@ -37,6 +39,9 @@ class Car():
         self.start_time = time.time()
         self.end_time = None
         self.finish_time = None
+
+        self.inputs = []
+        self.outputs = []
 
     def reset(self, hard: bool):
         self.body.position = 300, 500
@@ -77,7 +82,8 @@ class Car():
 
     def update_sight(self, surface):
 
-        directions = np.linspace(0, 2*math.pi, 32)  # Generate 32 diffrent angles of sight evenly distributed around the car
+        directions = np.linspace(0, 31*math.pi/16, 32)  # Generate 32 diffrent angles of sight evenly distributed around the car
+        self.inputs = []
 
         for d in directions:
 
@@ -93,7 +99,18 @@ class Car():
 
             pg.draw.line(surface, (255,0,0,75), segment_start, segment_end if info is None else info.point)
 
+            if info is not None:
+                vec = info.point - self.body.position
+                self.inputs.append(abs(vec))
+            else:
+                self.inputs.append(0)
+
+
         return self.sights
+
+    def drive_frame(self):
+        out = model.step(self.inputs)
+        return out
 
     def finish(self, arbiter, space, data):
         self.end_time = time.time()
@@ -155,14 +172,21 @@ def main():
             ):
                 running = False
 
+        car.update_sight(screen)
+
+
         keys = pg.key.get_pressed()
+
+        keypressed = car.drive_frame()
+        print(keypressed)
+
         if keys[pg.K_r]:
-            car.reset()
+            car.reset(hard=True)
 
         velo = car.get_velo()
-        if keys[pg.K_UP]:
+        if keys[pg.K_UP] | keypressed[0]:
             car.accelerate(acceleration)
-        elif keys[pg.K_DOWN]:
+        elif keys[pg.K_DOWN] | keypressed[1]:
             car.accelerate(-acceleration)
         else:
             if velo > 0:
@@ -170,17 +194,16 @@ def main():
             if (velo > 0) & (velo < 10):  # Prevent persistent "drifting" of the car
                 car.set_velocity(0, 0)
 
-        if keys[pg.K_LEFT]:
+        if keys[pg.K_LEFT | keypressed[2]]:
             car.turn(-1)
-        elif keys[pg.K_RIGHT]:
+        elif keys[pg.K_RIGHT] | keypressed[3]:
             car.turn(1)
 
-        car.update_sight(screen)
 
         space.debug_draw(draw_options)
         pg.display.flip()
         
-        fps = 60
+        fps = 20
         dt = 1.0 / fps
         space.step(dt)
 
