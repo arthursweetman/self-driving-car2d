@@ -12,17 +12,8 @@ from pymunk.vec2d import Vec2d
 import model
 
 
-width, height = 690, 600
-screen = pg.display.set_mode((width, height))
-
-# Declare Pymunk Space
-space = pm.Space()
-space.gravity = 0, 0
-
-SIGHT_LENGTH = 1000
-
 class Car():
-    def __init__(self):
+    def __init__(self, space):
         self.body = pm.Body()
         self.body.position = 300,500
         self.body.velocity = 0,0
@@ -40,7 +31,7 @@ class Car():
         self.end_time = None
         self.finish_time = None
 
-        self.inputs = []
+        self.observation = []
         self.outputs = []
 
     def reset(self, hard: bool):
@@ -80,12 +71,12 @@ class Car():
         self.body._set_angular_velocity(0)
         self.body.angle = (self.body.angle + turn_speed*direction)
 
-    def update_sight(self, surface, finish_wall):
+    def update_sight(self, space, finish_wall, SIGHT_LENGTH):
 
-        # self.inputs are reset in this method
+        # self.observation are reset in this method
 
         directions = np.linspace(0, 31*math.pi/16, 32)  # Generate 32 diffrent angles of sight evenly distributed around the car
-        self.inputs = []
+        self.observation = []
         sensor_distances = []
         wall_types = []
 
@@ -101,8 +92,6 @@ class Car():
             info = space.segment_query_first(segment_start, segment_end, radius=1, shape_filter=filter)
             self.sights['{0:.2f}'.format(d)] = (info.point if info is not None else None)
 
-            pg.draw.line(surface, (255,0,0,75), segment_start, segment_end if info is None else info.point)
-
             if info is not None:
                 vec = info.point - self.body.position
                 sensor_distances.append(abs(vec))
@@ -111,18 +100,31 @@ class Car():
                 sensor_distances.append(0)
                 wall_types.append(0)
 
-        self.inputs = sensor_distances + wall_types
+        self.observation = sensor_distances + wall_types
 
         return self.sights
 
+    def draw_sight(self, surface, sight_length):
+        directions = np.linspace(0, 31 * math.pi / 16,
+                                 32)  # Generate 32 diffrent angles of sight evenly distributed around the car
+        for d in directions:
+            angle = self.body.angle + d  # direction relative to directly in front of the car
+
+            segment_start = (self.body.position[0], self.body.position[1])
+            segment_end = self.body.position + (sight_length*math.cos(angle), sight_length*math.sin(angle))
+            segment_end = (segment_end[0], segment_end[1])
+            poc = self.sights['{0:.2f}'.format(d)]
+
+            pg.draw.line(surface, (255, 0, 0, 75), segment_start, segment_end if poc is None else poc)
+
     def update_info(self):
-        self.inputs = self.inputs + list(self.body.velocity)
-        self.inputs.append(self.body.velocity.angle)
-        self.inputs.append(self.body.angle)
+        self.observation = self.observation + list(self.body.velocity)
+        self.observation.append(self.body.velocity.angle)
+        self.observation.append(self.body.angle)
 
     def drive_frame(self):
-        out = model.step(self.inputs)
-        return out
+        action = model.step(self.observation)
+        return action
 
     def finish(self, arbiter, space, data):
         self.end_time = time.time()
@@ -137,7 +139,7 @@ class Car():
 
 
 class Wall():
-    def __init__(self, a, b, radius=5, collision_type=2, group = 2):
+    def __init__(self, a, b, space, radius=5, collision_type=2, group = 2):
         self.body = pm.Body(body_type = pm.Body.STATIC)
 
         self.shape = pm.Segment(self.body, a, b,radius)
@@ -146,32 +148,16 @@ class Wall():
         space.add(self.body, self.shape)
 
 
-def main():
+def game():
+    width, height = 690, 600
+    screen = pg.display.set_mode((width, height))
+
+    gamestate = GameState()
 
     pg.init()
     clock = pg.time.Clock()
     draw_options = util.DrawOptions(screen)
 
-    car = Car()
-
-    segments1 = [(250, 500),(250, 100)]
-    wall1 = Wall(*segments1)
-    segments2 = [(350, 500),(350, 100)]
-    wall2 = Wall(*segments2)
-    finishLine = [(250, 100),(350,100)]
-    finish = Wall(*finishLine, radius=10, collision_type=3, group=3)
-
-    acceleration = 15
-    friction = 10
-    max_speed = 60
-
-    hit_wall = space.add_collision_handler(1, 2)
-    hit_wall.begin = car.wall_collision
-
-    cross_finish = space.add_collision_handler(1, 3)
-    cross_finish.begin = car.finish
-
-    start_time = time.time()
     running = True
     # Run the game
     while running:
@@ -184,46 +170,86 @@ def main():
             ):
                 running = False
 
-        car.update_sight(screen, finish)
-        car.update_info()
+        gamestate.game_draw(screen)  # I believe the drawn sights will be a frame behind since this happens before game_step
 
         keys = pg.key.get_pressed()
+        action=[keys[pg.K_UP], keys[pg.K_DOWN], keys[pg.K_LEFT], keys[pg.K_RIGHT]]
 
-        keypressed = car.drive_frame()
-        print(keypressed)
-        # keypressed=[0,0,0,0]
+        gamestate.game_step(action, pygame_draw_options=draw_options)
 
-        if keys[pg.K_r]:
-            car.reset(hard=True)
-
-        velo = car.get_velo()
-        if keys[pg.K_UP] | keypressed[0]:
-            car.accelerate(acceleration)
-        elif keys[pg.K_DOWN] | keypressed[1]:
-            car.accelerate(-acceleration)
-        else:
-            if velo > 0:
-                car.decelerate(-friction)
-            if (velo > 0) & (velo < 10):  # Prevent persistent "drifting" of the car
-                car.set_velocity(0, 0)
-
-        if keys[pg.K_LEFT] | keypressed[2]:
-            car.turn(-1)
-        elif keys[pg.K_RIGHT] | keypressed[3]:
-            car.turn(1)
-
-
-        space.debug_draw(draw_options)
-        pg.display.flip()
-        
         fps = 60
-        dt = 1.0 / fps
-        space.step(dt)
-
         clock.tick(fps)
 
     pg.quit()
-    
+
+
+class GameState():
+    def __init__(self):
+        # Initialize the space and the car
+        self.space = pm.Space()
+        self.car = Car(self.space)
+        self.sight_length = 1000
+
+        # Initialize the walls and the finish line
+        segments1 = [(250, 500), (250, 100)]
+        self.wall1 = Wall(*segments1, space=self.space)
+        segments2 = [(350, 500), (350, 100)]
+        self.wall2 = Wall(*segments2, space=self.space)
+        finishLine = [(250, 100), (350, 100)]
+        self.finish_line = Wall(*finishLine, space=self.space, radius=10, collision_type=3, group=3)
+
+        # Collision handlers in the space
+        self.hit_wall = self.space.add_collision_handler(1, 2)
+        self.hit_wall.begin = self.car.wall_collision
+
+        self.cross_finish = self.space.add_collision_handler(1, 3)
+        self.cross_finish.begin = self.car.finish
+
+        # Record the start time
+        self.start_time = time.time()
+
+        self.car.update_sight(self.space, self.finish_line, self.sight_length)
+        self.car.update_info()
+
+        self.acceleration = 15
+        self.friction = 10
+
+    def game_step(self, action, pygame_draw_options = None):
+        if action is None:
+            action = self.car.drive_frame()
+        print(action)
+
+        self.car.update_sight(self.space, self.finish_line, self.sight_length)
+        self.car.update_info()
+
+        velo = self.car.get_velo()
+        if action[0]:
+            self.car.accelerate(self.acceleration)
+        elif action[1]:
+            self.car.accelerate(-self.acceleration)
+        else:
+            if velo > 0:
+                self.car.decelerate(-self.friction)
+            if (velo > 0) & (velo < 10):  # Prevent persistent "drifting" of the car
+                self.car.set_velocity(0, 0)
+
+        if action[2]:
+            self.car.turn(-1)
+        elif action[3]:
+            self.car.turn(1)
+
+        if pygame_draw_options is not None:
+            self.space.debug_draw(pygame_draw_options)
+            pg.display.flip()
+
+        fps = 60
+        dt = 1.0 / fps
+        self.space.step(dt)
+
+    def game_draw(self, surface):
+        self.car.draw_sight(surface, self.sight_length)
+
+
 
 if __name__ == "__main__":
-    main()
+    game()
