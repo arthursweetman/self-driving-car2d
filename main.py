@@ -80,10 +80,14 @@ class Car():
         self.body._set_angular_velocity(0)
         self.body.angle = (self.body.angle + turn_speed*direction)
 
-    def update_sight(self, surface):
+    def update_sight(self, surface, finish_wall):
+
+        # self.inputs are reset in this method
 
         directions = np.linspace(0, 31*math.pi/16, 32)  # Generate 32 diffrent angles of sight evenly distributed around the car
         self.inputs = []
+        sensor_distances = []
+        wall_types = []
 
         for d in directions:
 
@@ -101,12 +105,20 @@ class Car():
 
             if info is not None:
                 vec = info.point - self.body.position
-                self.inputs.append(abs(vec))
+                sensor_distances.append(abs(vec))
+                wall_types.append(1 if info.shape == finish_wall.shape else -1)
             else:
-                self.inputs.append(0)
+                sensor_distances.append(0)
+                wall_types.append(0)
 
+        self.inputs = sensor_distances + wall_types
 
         return self.sights
+
+    def update_info(self):
+        self.inputs = self.inputs + list(self.body.velocity)
+        self.inputs.append(self.body.velocity.angle)
+        self.inputs.append(self.body.angle)
 
     def drive_frame(self):
         out = model.step(self.inputs)
@@ -172,13 +184,14 @@ def main():
             ):
                 running = False
 
-        car.update_sight(screen)
-
+        car.update_sight(screen, finish)
+        car.update_info()
 
         keys = pg.key.get_pressed()
 
         keypressed = car.drive_frame()
         print(keypressed)
+        # keypressed=[0,0,0,0]
 
         if keys[pg.K_r]:
             car.reset(hard=True)
@@ -194,7 +207,7 @@ def main():
             if (velo > 0) & (velo < 10):  # Prevent persistent "drifting" of the car
                 car.set_velocity(0, 0)
 
-        if keys[pg.K_LEFT | keypressed[2]]:
+        if keys[pg.K_LEFT] | keypressed[2]:
             car.turn(-1)
         elif keys[pg.K_RIGHT] | keypressed[3]:
             car.turn(1)
@@ -203,7 +216,7 @@ def main():
         space.debug_draw(draw_options)
         pg.display.flip()
         
-        fps = 20
+        fps = 60
         dt = 1.0 / fps
         space.step(dt)
 

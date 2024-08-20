@@ -10,7 +10,7 @@ torch.device('cuda')
 class FFnn(nn.Module):
     def __init__(self):
         super(FFnn, self).__init__()
-        self.ff1 = nn.Linear(32, 64)
+        self.ff1 = nn.Linear(68, 64)
         self.ff2 = nn.Linear(64, 32)
         self.out = nn.Linear(32, 4)
 
