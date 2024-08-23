@@ -11,11 +11,15 @@ from pymunk.vec2d import Vec2d
 
 import model
 
+SCREEN_WIDTH, SCREEN_HEIGHT = 800, 800
+
+ACCEL = 15
+FRICTION = 10
 
 class Car():
     def __init__(self, space):
         self.body = pm.Body()
-        self.body.position = 300,500
+        self.body.position = SCREEN_WIDTH/2, SCREEN_HEIGHT/2
         self.body.velocity = 0,0
         self.body.angle = 3*math.pi/2
         self.sights = {}
@@ -33,39 +37,6 @@ class Car():
 
         self.observation = []
         self.outputs = []
-
-    def reset(self, hard: bool):
-        self.body.position = 300, 500
-        self.body.velocity = 0, 0
-        self.body.angle = 3 * math.pi / 2
-        self.body._set_angular_velocity(0)
-
-        if hard:
-            self.start_time = time.time()
-            self.end_time = None
-            self.finish_time = None
-
-    def accelerate(self, accel_const):
-        # Accelerate in the direction the car is facing
-        angle = self.body.angle
-        self.body.velocity += accel_const*math.cos(angle), accel_const*math.sin(angle)
-
-    def decelerate(self, accel_const):
-        # Decelerate in the direction of the velocity vector
-        x = self.body.velocity[0]
-        y = self.body.velocity[1]
-        angle = math.atan2(y, x)  # angle of the direction of velocity
-        self.body.velocity += accel_const*math.cos(angle), accel_const*math.sin(angle)
-
-    def get_velo(self):
-        x=self.body.velocity[0]
-        y=self.body.velocity[1]
-        magnitude = math.sqrt(x**2 + y**2)
-
-        return magnitude
-
-    def set_velocity(self, x, y):
-        self.body.velocity = x, y
 
     def turn(self, direction, turn_speed=math.pi/36):
         self.body._set_angular_velocity(0)
@@ -126,41 +97,34 @@ class Car():
         action = model.step(self.observation)
         return action
 
-    def finish(self, arbiter, space, data):
-        self.end_time = time.time()
-        self.finish_time = self.end_time - self.start_time
-        print(f"Completed course in {self.finish_time} seconds.")
-        self.reset(hard=True)
-        return True
-
-    def wall_collision(self, arbiter, space, data):
-        self.reset(hard=False)
-        return True
-
 
 class Wall():
-    def __init__(self, a, b, space, radius=5, collision_type=2, group = 2):
-        self.body = pm.Body(body_type = pm.Body.STATIC)
+    def __init__(self, center, length, angle, space, radius=2, collision_type=2, group = 2):
+        self.body = pm.Body(body_type = pm.Body.KINEMATIC)
+        self.body.position = center
+        self.body.angle = angle
 
-        self.shape = pm.Segment(self.body, a, b,radius)
+        self.shape = pm.Segment(self.body, (-length/2, 0), (length/2, 0), radius)
         self.shape.collision_type = collision_type
         self.shape.filter = pm.ShapeFilter(group = group)
+
         space.add(self.body, self.shape)
 
 
 def game():
-    width, height = 690, 600
-    screen = pg.display.set_mode((width, height))
+    screen = pg.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
     gamestate = GameState()
 
     pg.init()
+    pg.display.set_caption("Car")
     clock = pg.time.Clock()
     draw_options = util.DrawOptions(screen)
 
     running = True
+    terminal_state = False
     # Run the game
-    while running:
+    while running and not terminal_state:
         screen.fill(pg.Color("white"))
         for event in pg.event.get():
             if(
@@ -175,7 +139,7 @@ def game():
         keys = pg.key.get_pressed()
         action=[keys[pg.K_UP], keys[pg.K_DOWN], keys[pg.K_LEFT], keys[pg.K_RIGHT]]
 
-        gamestate.game_step(action, pygame_draw_options=draw_options)
+        terminal_state = gamestate.game_step(action, pygame_draw_options=draw_options)
 
         fps = 60
         clock.tick(fps)
@@ -183,27 +147,26 @@ def game():
     pg.quit()
 
 
+scroll = [0,0]
 class GameState():
     def __init__(self):
         # Initialize the space and the car
+        self.terminal_state = False
         self.space = pm.Space()
         self.car = Car(self.space)
         self.sight_length = 1000
 
         # Initialize the walls and the finish line
-        segments1 = [(250, 500), (250, 100)]
-        self.wall1 = Wall(*segments1, space=self.space)
-        segments2 = [(350, 500), (350, 100)]
-        self.wall2 = Wall(*segments2, space=self.space)
-        finishLine = [(250, 100), (350, 100)]
-        self.finish_line = Wall(*finishLine, space=self.space, radius=10, collision_type=3, group=3)
+        self.wall1 = Wall((250, 300), 400, math.pi/2, space=self.space)
+        self.wall2 = Wall((350, 300), 400, math.pi/2, space=self.space)
+        self.finish_line = Wall((300, 100), 100, 0, space=self.space, radius=2, collision_type=3, group=3)
 
         # Collision handlers in the space
         self.hit_wall = self.space.add_collision_handler(1, 2)
-        self.hit_wall.begin = self.car.wall_collision
+        self.hit_wall.begin = self.wall_collision
 
         self.cross_finish = self.space.add_collision_handler(1, 3)
-        self.cross_finish.begin = self.car.finish
+        self.cross_finish.begin = self.finish_collision
 
         # Record the start time
         self.start_time = time.time()
@@ -222,16 +185,30 @@ class GameState():
         self.car.update_sight(self.space, self.finish_line, self.sight_length)
         self.car.update_info()
 
-        velo = self.car.get_velo()
+        velo = abs(self.wall1.body.velocity)
         if action[0]:
-            self.car.accelerate(self.acceleration)
+            # Accelerate in the direction of the car
+            accel_vec = (ACCEL*math.cos(self.car.body.angle), ACCEL*math.sin(self.car.body.angle))
+            self.wall1.body.velocity -= accel_vec
+            self.wall2.body.velocity -= accel_vec
+            self.finish_line.body.velocity -= accel_vec
         elif action[1]:
-            self.car.accelerate(-self.acceleration)
+            accel_vec = (ACCEL*math.cos(self.car.body.angle), ACCEL*math.sin(self.car.body.angle))
+            self.wall1.body.velocity += accel_vec
+            self.wall2.body.velocity += accel_vec
+            self.finish_line.body.velocity += accel_vec
         else:
             if velo > 0:
-                self.car.decelerate(-self.friction)
+                # Decelerate in direction of velocity vector
+                angle = self.wall1.body.velocity.angle
+                decel_vec = (FRICTION*math.cos(angle), FRICTION*math.sin(angle))
+                self.wall1.body.velocity -= decel_vec
+                self.wall2.body.velocity -= decel_vec
+                self.finish_line.body.velocity -= decel_vec
             if (velo > 0) & (velo < 10):  # Prevent persistent "drifting" of the car
-                self.car.set_velocity(0, 0)
+                self.wall1.body.velocity = 0, 0
+                self.wall2.body.velocity = 0, 0
+                self.finish_line.body.velocity = 0, 0
 
         if action[2]:
             self.car.turn(-1)
@@ -246,9 +223,18 @@ class GameState():
         dt = 1.0 / fps
         self.space.step(dt)
 
+        return self.terminal_state
+
     def game_draw(self, surface):
         self.car.draw_sight(surface, self.sight_length)
 
+    def wall_collision(self, arbiter, space, data):
+        self.terminal_state = True
+        return True
+
+    def finish_collision(self, arbiter, space, data):
+        self.terminal_state = True
+        return True
 
 
 if __name__ == "__main__":
