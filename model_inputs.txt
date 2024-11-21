@@ -1,0 +1,17 @@
+model inputs:
+car position vector (2 measurements)
+-car sight distances to walls (32 measurements)
+-car speed vector (2)
+-car speed angle (1)
+-car angle (in radians) (1)
+-car sight info (-1 for wall, 0 for nothing, 1 for finish line)
+car sight angles at the walls (surface normal)? (32)
+car sight distances to finish line (32 measurements)
+
+model output:
+it can use any of the 4 arrow keys to acheive its gaol of crossing the finish line in as fast a time as possible
+
+ideas:
+penalize model if it starts to face the wrong direction
+
+immediate reward (r_t+1) = distance to finish line
